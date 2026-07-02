@@ -5,7 +5,7 @@ echo "Running Prisma migrations..."
 npx prisma migrate deploy
 
 echo "Running seed..."
-npx prisma db seed
+npx prisma db seed || echo "Seed failed (non-fatal)"
 
 echo "Starting app..."
-npm run start:prod
+exec npm run start:prod
