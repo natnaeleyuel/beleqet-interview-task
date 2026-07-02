@@ -99,3 +99,14 @@ export async function fetchJobs(params?: {
 export async function fetchJob(id: string): Promise<ApiJob> {
   return apiFetch<ApiJob>(`/jobs/${id}`);
 }
+
+export type ApiCategory = {
+  id: string;
+  slug: string;
+  label: string;
+  icon: string | null;
+};
+
+export async function fetchCategories(): Promise<ApiCategory[]> {
+  return apiFetch<ApiCategory[]>('/jobs/categories');
+}
