@@ -79,7 +79,7 @@ export default function CategoryGrid() {
               <cat.icon className="h-4.5 w-4.5" />
             </span>
             <span className="text-xs font-semibold text-ink">{cat.label}</span>
-            <span className="text-[11px] text-muted">{cat.count} jobs</span>
+            {cat.count !== "0" && <span className="text-[11px] text-muted">{cat.count} jobs</span>}
           </Link>
         ))}
       </div>

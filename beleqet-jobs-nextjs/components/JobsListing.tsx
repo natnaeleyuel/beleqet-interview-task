@@ -3,8 +3,8 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Search, MapPin, SlidersHorizontal } from 'lucide-react';
-import { jobs as mockJobs, categories } from '@/lib/mockData';
-import { fetchJobs, type ApiJob } from '@/lib/api';
+import { jobs as mockJobs, categories as mockCategories } from '@/lib/mockData';
+import { fetchJobs, fetchCategories, type ApiJob, type ApiCategory } from '@/lib/api';
 import JobCard from '@/components/JobCard';
 
 const jobTypes = ['Full Time', 'Part Time', 'Remote', 'Hybrid', 'On-site', 'Contract'];
@@ -46,6 +46,7 @@ type DisplayJob = ReturnType<typeof mapApiJob>;
 export default function JobsListing() {
   const searchParams = useSearchParams();
   const [apiJobs, setApiJobs] = useState<DisplayJob[] | null>(null);
+  const [apiCategories, setApiCategories] = useState<{ id: string; label: string; count?: string }[] | null>(null);
 
   useEffect(() => {
     const params: Record<string, string> = {};
@@ -58,6 +59,9 @@ export default function JobsListing() {
     fetchJobs(params)
       .then((data) => setApiJobs(data.items.map(mapApiJob)))
       .catch(() => setApiJobs([]));
+    fetchCategories()
+      .then((cats: ApiCategory[]) => setApiCategories(cats.map((c: ApiCategory) => ({ id: c.id, label: c.label }))))
+      .catch(() => setApiCategories([]));
   }, []);
 
   const [query, setQuery] = useState(searchParams.get('q') ?? '');
@@ -124,7 +128,7 @@ export default function JobsListing() {
               >
                 All Categories
               </button>
-              {categories.map((cat) => (
+              {(apiCategories ?? mockCategories).map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setCategory(cat.id)}
@@ -133,7 +137,7 @@ export default function JobsListing() {
                   }`}
                 >
                   <span>{cat.label}</span>
-                  <span className="text-xs">{cat.count}</span>
+                  {'count' in cat && cat.count ? <span className="text-xs">{cat.count}</span> : null}
                 </button>
               ))}
             </div>
