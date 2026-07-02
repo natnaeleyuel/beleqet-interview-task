@@ -1,227 +1,294 @@
-# Engineering Report
+# Beleqet — Engineering Report
 
-This document captures the reasoning, trade-offs, and scope boundaries behind every change. Written for a tech lead reviewing the submission.
+## Project Overview
 
----
-
-## Phase 3 — Frontend Deployment Preparation & Backend Polish
-
-### Frontend API Integration (graceful degradation)
-
-**Problem**: The Next.js frontend used static `lib/mockData.ts` everywhere. No runtime API calls. Deployment to Vercel would show hardcoded data that doesn't reflect the live backend.
-
-**Decision**: Created `lib/config.ts` (reads `NEXT_PUBLIC_API_URL` with fallback to `http://localhost:4000/api/v1`) and `lib/api.ts` (typed fetch wrapper with `fetchJobs()`, `fetchJob()`). Wired three components with an API-first, mock-fallback strategy:
-
-| Component | Approach |
-|---|---|
-| `FeaturedJobs` (server component) | `async` component fetches from API during SSR; on fetch failure, catches and renders mock data |
-| `JobDetailPage` (SSG) | `generateStaticParams` returns mock IDs; page tries API first, falls back to `mockData.ts` |
-| `JobsListing` (client component) | `useEffect` fetch on mount; catches errors silently; falls back to mock data |
-
-**Trade-off**: The mock fallback means the frontend builds and renders even when the backend is down (e.g., during Vercel build where no backend URL exists yet). The downside is silent fallbacks could hide integration issues in development. A `<DevBanner>` or env flag could warn when fallback is active.
-
-### Auth Page
-
-**Problem**: The `Header` component linked to `/login`, which returned 404. The project had no auth UI.
-
-**Decision**: Created a single `/login` page with a register/login toggle form. Calls `POST /api/v1/auth/register` and `POST /api/v1/auth/login`, stores the JWT in `localStorage`. No auth context provider yet — the token is available but there's no global state to read it across routes. Scoped as a minimal fix to unblock demo evaluation.
-
-**Not implemented** (deferred):
-- Auth context provider (`AuthContext` wrapping `layout.tsx`)
-- Protected route redirects
-- Token refresh logic
-- Logout clears token but does not redirect
-
-### Demo Data Seeding
-
-**Problem**: The Prisma seed creates 55 categories but no companies, users, or jobs. An empty API returns `[]` — useless for a demo.
-
-**Decision**: Created 3 employer users + 3 companies (TakaCash, ethio telecom, Zemen Bank) + 3 published jobs via direct SQL at the database level. The seed file itself was not modified; demo data was inserted independently so it can be dropped easily for a clean production launch.
-
-**Future**: The seed file should be extended with an optional demo-data block gated by `NODE_ENV !== 'production'`. For now this is a manual SQL step.
-
-### Railway Deployment Compatibility
-
-**Problem**: Two issues made Railway deployment fail:
-1. Redis config read individual `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` vars. Railway provides a single `REDIS_URL`.
-2. Dockerfile ran only `prisma migrate deploy` — no seed step. Deployed backend would have an empty database.
-
-**Fixes**:
-1. `src/app.module.ts`: Added `REDIS_URL` detection — when set, parse it with `new URL()` into host/port/password; otherwise fall back to the individual vars.
-2. Created `startup.sh` that runs `prisma migrate deploy` → `prisma db seed` → `npm run start:prod`. Dockerfile updated to use it.
-
-**Verification**: `docker compose build` succeeds with the updated Dockerfile. The `seed` step is idempotent (`upsert` calls), safe to run on every container restart.
-
-### Deployment Config
-
-| File | Purpose |
-|---|---|
-| `beleqet-jobs-nextjs/.env.example` | Documents `NEXT_PUBLIC_API_URL` for Vercel |
-| `beleqet-jobs-nextjs/.env.local` | Local dev override pointing to Docker compose backend |
-| `beleqet-jobs-nextjs/vercel.json` | Explicit build/install/framework settings |
+Beleqet is an Ethiopian hiring platform with job board, freelance marketplace, and escrow payment features. The backend is a NestJS API (PostgreSQL + Redis + BullMQ), and the frontend is a Next.js 14 App Router application. This report covers the full lifecycle: initial audit, security fixes, architecture corrections, operational hardening, frontend-backend integration, and production deployment to Railway + Vercel.
 
 ---
 
-## Scope Boundaries
+## 1. Initial Audit — Problems Found
 
-These were identified during the initial audit and intentionally deferred. Each has a reason.
+The repository as received had 10 critical gaps:
 
-| Item | Why deferred |
-|------|-------------|
-| **Search module** (OpenSearch stub) | Marked "Phase 2" in the original code. Would need OpenSearch/Elasticsearch infra, frontend UI, and reindexing pipeline - a separate feature, not a fix. |
-| **Frontend-backend integration** | Frontend uses `mockData.ts` throughout. Wiring to live API is a frontend engineering task (Next.js pages, auth state, error handling) independent of backend correctness. |
-| **Git history secret remediation** | Secrets in commit `91e14f8` require `git filter-repo` or BFG to rewrite history, plus rotating credentials on Chapa. Out of scope for this pass; flagged for next security review. |
-| **Bull Board UI** | Would need `@bull-board/api` + `@bull-board/express` + Express session middleware for basic auth. Queue visibility is valuable but the effort-to-value ratio is lower than every item in this PR. |
-| **Node version mismatch** | Docker uses `node:20-alpine`; `@types/node` targets `^22.5.5`. No compile errors observed in practice. Cleaning this up would mean either upgrading the Docker image or pinning types - neither blocks correctness. |
-| **`ParseUUIDPipe` cleanup** | Defined but never imported by any controller. Harmless dead code; removing it has no behavioural impact. |
+| Category | Issue | Severity |
+|---|---|---|
+| Security | Hardcoded Chapa secrets committed in `91e14f8` | Critical |
+| Security | No `.gitignore` — `.env` would be committed | High |
+| Security | Rate limiting configured but never wired — `@Throttle()` decorators were no-ops | High |
+| Correctness | `WalletProcessor` defined but orphaned — nothing enqueued to its WALLET queue | High |
+| Correctness | BullMQ imports from legacy `bull` package instead of `bullmq` — `job.queue.add()` calls would crash at runtime | High |
+| Correctness | No Prisma migrations — Dockerfile used `prisma db push --accept-data-loss` | High |
+| Operations | Docker Compose had no healthchecks, no `env_file` pass-through | Medium |
+| Operations | WebSocket CORS set to `origin: true` (allow all) | Medium |
+| Frontend | `/login` route returned 404 — Header had a dead link | Medium |
+| Frontend | No API integration — everything used static `mockData.ts` | Medium |
 
----
-
-## Security - Hardcoded secrets
-
-**Problem**: `webhook-server.js` and `simulate.js` contained inline `CHAPA_SECRET`, `WEBHOOK_SECRET`, and a hardcoded HMAC signature committed in `91e14f8`.
-
-**Decision**: Replaced all inline secrets with `process.env.CHAPA_SECRET_KEY` / `process.env.CHAPA_WEBHOOK_SECRET`, matching the naming convention already used across the NestJS codebase.
-
-**Trade-off**: The secrets remain in git history. Full remediation would require history rewrite + credential rotation. Flagged for follow-up.
-
----
-
-## Security - Env var hygiene
-
-**Problem**: `.env.example` contained 4 dead variables never referenced in code (`TELEGRAM_CHANNEL_ID`, `CHAPA_PUBLIC_KEY`, `BULL_BOARD_USERNAME`, `BULL_BOARD_PASSWORD`) and was missing `AWS_ENDPOINT`, which the upload service actually uses.
-
-**Decision**: Removed dead vars; added `AWS_ENDPOINT`. Kept `BULL_BOARD_USERNAME`/`BULL_BOARD_PASSWORD` out since Bull Board isn't wired up - they can be reintroduced if that changes.
+**Deferred** (out of scope):
+- OpenSearch search module (requires infra + separate feature)
+- Bull Board UI (queues dashboard — low priority)
+- Git history secret rewrite (needs `git filter-repo` + credential rotation)
 
 ---
 
-## Security - Rate limiting
+## 2. Phase 1 — Security & Environment
 
-**Problem**: `ThrottlerModule` was configured in `app.module.ts` but `ThrottlerGuard` was never registered as a global guard. The `@Throttle()` decorators on auth routes were no-ops at runtime.
+### Hardcoded Secrets Removal
+`webhook-server.js` and `simulate.js` contained inline `CHAPA_SECRET`, `WEBHOOK_SECRET`, and a hardcoded HMAC signature. Replaced all with `process.env.CHAPA_SECRET_KEY` / `process.env.CHAPA_WEBHOOK_SECRET`, matching the naming convention already used across the NestJS codebase. Secrets remain in git history (`91e14f8`) — full remediation needs `git filter-repo` + credential rotation.
 
-**Decision**: Three changes:
-1. Registered `ThrottlerGuard` as a global `APP_GUARD` in `app.module.ts`
-2. Simplified config from 3 named throttlers (`short`/`medium`/`long`) to a single unnamed throttler (`{ ttl: 60_000, limit: 100 }`). This receives the implicit name `"default"`, matching the key used by all `@Throttle({ default: { ... } })` decorators - the named throttlers were never referenced by any route.
-3. Applied `@Throttle()` decorators to sensitive routes
+### Env Var Hygiene
+`.env.example` had 4 dead variables never referenced in code (`TELEGRAM_CHANNEL_ID`, `CHAPA_PUBLIC_KEY`, `BULL_BOARD_USERNAME`, `BULL_BOARD_PASSWORD`) and was missing `AWS_ENDPOINT`, which the upload service actually uses. Removed dead vars; added `AWS_ENDPOINT`.
 
-**`@nestjs/throttler` v6 detail**: The guard uses `totalHits > limit`, so `limit: N` allows N-1 requests before blocking. All limits were bumped by 1 to match the intended burst:
+### Root `.gitignore`
+Added `.env`, `.env.*` (with `!.env.example` exception), `node_modules/`, `dist/`, `.next/`, `coverage/`, and OS files.
+
+---
+
+## 3. Phase 2 — Backend Correctness
+
+### Rate Limiting
+`ThrottlerModule` was configured in `app.module.ts` but `ThrottlerGuard` was never registered as a global `APP_GUARD`. The `@Throttle()` decorators on auth routes were no-ops at runtime.
+
+**Fix**: Registered `ThrottlerGuard` globally. Simplified config from 3 named throttlers (`short`/`medium`/`long`) to a single unnamed throttler (`{ ttl: 60_000, limit: 100 }`) — the named throttlers were never referenced by any route.
+
+**v6 quirk**: The guard uses `totalHits > limit`, so `limit: N` allows N-1 requests. All limits bumped by 1:
 
 | Route | Config limit | Effective limit |
 |---|---|---|
-| `POST /auth/register` | 6 | 5 registrations/min |
-| `POST /auth/login` | 6 | 5 attempts/min |
-| `POST /auth/forgot-password` | 4 | 3 requests/min |
-| `POST /auth/reset-password` | 4 | 3 requests/min |
-| `POST /escrow/callback` | 11 | 10 webhooks/min |
+| `POST /auth/register` | 6 | 5/min |
+| `POST /auth/login` | 6 | 5/min |
+| `POST /auth/forgot-password` | 4 | 3/min |
+| `POST /auth/reset-password` | 4 | 3/min |
+| `POST /escrow/callback` | 11 | 10/min |
 
-**Verification**: 6 rapid POSTs to `/auth/login` - requests 1-5 return `401` (wrong credentials), request 6 returns `429 Too Many Requests`.
+**Verification**: 6 rapid POSTs to `/auth/login` — requests 1-5 return `401`, request 6 returns `429`.
 
----
+### WalletProcessor Wiring
+`WalletProcessor` handled a `release-pending` job type that nothing ever enqueued. `EscrowProcessor.handleAutoRelease()` updated wallet balances directly, bypassing the queue architecture entirely.
 
-## Correctness - WalletProcessor wiring
+**Fix**: `EscrowProcessor` now enqueues `WALLET_JOBS.RELEASE_PENDING` to the `WALLET` queue after the 3-day hold. `WalletProcessor` owns only the balance state machine (pending → available + transaction record). `EscrowProcessor` handles event logging and notifications. Keeps the flow event-driven and consistent with existing BullMQ patterns.
 
-**Problem**: `WalletProcessor` handled a `release-pending` job type that nothing ever enqueued. Meanwhile, `EscrowProcessor.handleAutoRelease()` updated wallet balances directly, bypassing the queue architecture entirely.
+### BullMQ Standardization
+The codebase imported `Queue` and `Job` from the legacy `'bull'` package, while actually using BullMQ v5 via the `@nestjs/bull` bridge. Bull v4 API calls like `job.queue.add()` don't exist on BullMQ's `Job` type.
 
-**Decision**: `EscrowProcessor` now enqueues `WALLET_JOBS.RELEASE_PENDING` to the `WALLET` queue after the 3-day hold elapses. `WalletProcessor` owns only the balance state machine (pending → available + transaction record), while `EscrowProcessor` handles event logging and notifications.
+**Fix**: Replaced all `import { Queue } from 'bull'` / `import { Job } from 'bull'` with `import { Queue, Job } from 'bullmq'`. Removed `bull` and `@types/bull` from `package.json`. Replaced two `job.queue.add()` calls with injected queue references (`this.queue.add(...)`).
 
-**Design rationale**: A scheduled/repeatable sweep job could also work, but the current architecture already has the correct trigger point - `EscrowProcessor.handleAutoRelease()` fires naturally after the hold. Pushing to the WALLET queue keeps the flow event-driven and consistent with existing BullMQ patterns.
+### Prisma Migrations
+The repository had no `prisma/migrations/` directory. The Dockerfile used `prisma db push --accept-data-loss` as a fallback, which is dangerous for production.
 
----
+**Fix**: Created the initial migration using `prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script` (597 lines, 24 models). Dockerfile now uses `prisma migrate deploy`.
 
-## Correctness - BullMQ standardization
-
-**Problem**: The codebase imported `Queue` and `Job` from the legacy `'bull'` package, while actually using BullMQ v5 via the `@nestjs/bull` bridge. Bull v4 API calls like `job.queue.add()` don't exist on BullMQ's `Job` type.
-
-**Decision**: Three changes:
-1. Replaced all `import { Queue } from 'bull'` / `import { Job } from 'bull'` with `import { Queue, Job } from 'bullmq'`
-2. Removed `bull` and `@types/bull` from `package.json` (unused dependencies)
-3. Replaced two `job.queue.add()` calls in `ScreeningProcessor` and `EscrowProcessor` with injected queue references (`this.queue.add(...)`)
-
-**Why not switch to `@nestjs/bullmq`?**: The `@nestjs/bull` v10+ bridge supports BullMQ natively. Switching to `@nestjs/bullmq` would mean changing every decorator import (`@Processor`, `@Process`, `@InjectQueue`) with functionally identical APIs from a different package - cosmetic churn with no behavioural difference. The critical change was the type imports and removing the legacy dependency.
+**Verification**: Zero drift confirmed — `prisma migrate diff --from-schema-datamodel --to-url <db>` detects no differences. Table count: 24 models.
 
 ---
 
-## Correctness - Prisma migrations
+## 4. Phase 2 — Operations
 
-**Problem**: The repository had no `prisma/migrations/` directory. The Dockerfile used `prisma db push --accept-data-loss` as a fallback, which is dangerous for production.
-
-**Decision**: Created the initial migration using `prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script` (597 lines, 24 models). The Dockerfile now uses `prisma migrate deploy`.
-
-**Verification**:
-- Applied to a fresh PostgreSQL volume
-- `prisma migrate status` → "Database schema is up to date!"
-- `prisma migrate diff --from-schema-datamodel --to-url <db>` → "No difference detected." **Zero drift.**
-- Table count: 24 models (confirmed via `grep -c "^model " prisma/schema.prisma`)
-
-**Note**: An earlier report of "3 minor drifts" was a false positive from an incorrect `prisma migrate diff` invocation (missing `--to-url`). With the correct command, schema and database match exactly - `payload` is `JSONB NOT NULL`, array fields have no default.
-
----
-
-## Operations - Docker Compose hardening
-
-**Problem**: The compose file had no healthchecks, missing env var pass-through, permissive WebSocket CORS, and a dangerous migration strategy.
+### Docker Compose Hardening
+The compose file had no healthchecks, missing env var pass-through, permissive WebSocket CORS, and a dangerous migration strategy.
 
 **Changes**:
-1. **Healthchecks** on all 3 services (Postgres: `pg_isready`, Redis: `redis-cli ping`, backend: `curl http://localhost:4000/api/v1` checking for non-5xx). Backend waits for healthy `db` + `redis`.
-2. **`env_file: .env`** replaces inline `environment` block - all env vars (`SMTP_*`, `CHAPA_*`, `TELEGRAM_*`, `AWS_*`) now reach the backend container.
-3. **Dockerfile CMD** changed from `prisma db push --accept-data-loss` to `npx prisma migrate deploy && npm run start:prod`.
-4. **WebSocket CORS** tightened from `origin: true` to `process.env.FRONTEND_URL`.
+1. **Healthchecks** on all 3 services (Postgres: `pg_isready`, Redis: `redis-cli ping`, backend: `curl` checking for non-5xx)
+2. **`env_file: .env`** replaces inline `environment` block — all env vars reach the backend container
+3. **Dockerfile CMD** changed from `prisma db push` to `migrate deploy` + `start:prod`
+4. **WebSocket CORS** tightened from `origin: true` to `process.env.FRONTEND_URL`
 
-**E2E verification**: Full `docker compose up -d` tested on a clean machine - all 3 containers healthy, migration applied on startup, registration returns 201, login returns 200, rate limiting returns 429 on the 6th request.
+### Tests
+4 new test files covering the highest-risk areas:
 
----
+| File | Coverage |
+|---|---|
+| `auth.service.spec.ts` | Register, duplicate email, login, invalid password |
+| `auth.controller.spec.ts` | `@Throttle()` decorator metadata on all 4 routes |
+| `wallet.processor.spec.ts` | Pending→available, idempotent retry |
+| `escrow.processor.spec.ts` | Webhook funding, idempotency, unknown reference, auto-release |
 
-## Tests
-
-**Strategy**: Wrote targeted tests for the highest-risk, most-demonstrative pieces. Each follows existing mocking patterns (manual mocks, `@nestjs/testing`, no real DB).
-
-| File | What it covers |
-|------|---------------|
-| `auth.service.spec.ts` | Register happy path, duplicate email rejection, valid login, invalid password |
-| `auth.controller.spec.ts` | `@Throttle()` decorator metadata present on all 4 rate-limited routes (metadata-based, no HTTP stack needed) |
-| `wallet.processor.spec.ts` | Pending→available transition, idempotent retry (no double-credit) |
-| `escrow.processor.spec.ts` | Webhook funding, idempotent skip on already-funded, unknown reference graceful handling, auto-release wallet enqueue, re-queue with delay when hold not elapsed |
-
-All 22 tests pass across 9 suites. The 5 pre-existing smoke tests remain unchanged.
-
-**Lint**: Confirmed genuinely pre-existing. The original commit `91e14f8` produces `eslint: not found` - ESLint was never a direct devDependency. `@nestjs/cli` v10 no longer bundles it.
+22/22 tests pass across 9 suites.
 
 ---
 
-## Summary of changes by file
+## 5. Phase 3 — Frontend Integration
 
-### Phase 2 (Backend fixes, security, operations)
+### API Client
+Created `lib/config.ts` (reads `NEXT_PUBLIC_API_URL` with fallback to `http://localhost:4000/api/v1`) and `lib/api.ts` (typed fetch wrapper). All wired components use an API-first, mock-fallback strategy so the app builds and runs even when the backend is unreachable.
+
+### Components Wired
+
+| Component | Type | API Call | Fallback |
+|---|---|---|---|
+| `FeaturedJobs` | Server (async) | `fetchJobs()` on SSR | Mock `jobs` filtered to featured |
+| `JobsListing` | Client (`useEffect`) | `fetchJobs()` + `fetchCategories()` | Mock jobs + categories |
+| `JobDetailPage` | SSG (`generateStaticParams`) | `fetchJob(id)` | Mock `jobs.find()` + related |
+| `CategoryGrid` | Client (`useEffect`) | `fetchCategories()` | Mock categories |
+| `StatsBar` | Client (`useEffect`) | `fetchJobs()` + `fetchCategories()` for counts | Mock stats array |
+| `Header` | Client (`useEffect`) | Reads `localStorage` for token | Shows Login/Sign Up when no token |
+
+### Auth Page
+Created `/login` with register/login toggle. Calls the backend auth endpoints. Stores JWT + refresh token + user info in `localStorage` under keys `beleqet_token`, `beleqet_refresh`, `beleqet_user`. After login, hard-navigates to `/` so the Header remounts and reflects the authenticated state.
+
+### Seed Data
+Extended `prisma/seed.ts` with 3 employer users, 3 companies (TakaCash, ethio telecom, Zemen Bank), and 3 published demo jobs. Uses `upsert` for idempotency — safe to run on every deploy.
+
+---
+
+## 6. Phase 3 — Deployment
+
+### Railway Setup
+
+| Setting | Value |
+|---|---|
+| Root Directory | `backend/` |
+| Builder | Railpack (auto-detects Dockerfile) |
+| Start Command | (none — `startup.sh` handles it) |
+| Healthcheck Path | `/api/v1/jobs?limit=1` |
+
+### Environment Variables Required
+
+| Variable | Source |
+|---|---|
+| `DATABASE_URL` | Railway Postgres plugin (append `?sslmode=require`) |
+| `REDIS_URL` | Railway Redis plugin |
+| `JWT_ACCESS_SECRET` | `openssl rand -hex 64` |
+| `FRONTEND_URL` | Vercel app URL |
+| `NODE_ENV` | `production` |
+
+### Railway Compatibility Fixes
+1. **Redis URL parsing**: Railway provides a single `REDIS_URL` connection string, but the app expected separate `REDIS_HOST`/`PORT`/`PASSWORD` vars. Added `REDIS_URL` detection with `new URL()` parsing, falling back to individual vars.
+2. **Startup script**: Created `startup.sh` that runs `prisma migrate deploy` → `prisma db seed` → `npm run start:prod`. Dockerfile updated to use it.
+3. **Seed config**: Added `"prisma": { "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts" }` to `package.json` — required for `prisma db seed` to work.
+4. **CORS**: Added trailing-slash stripping and dual-origin support (`FRONTEND_URL` + `localhost:3000`) for development convenience.
+
+### Vercel Setup
+
+| Setting | Value |
+|---|---|
+| Root Directory | `beleqet-jobs-nextjs/` |
+| Build Command | `npm run build` |
+| Install Command | `npm install` |
+| Env Var | `NEXT_PUBLIC_API_URL=https://beleqet-interview-task-production.up.railway.app/api/v1` |
+
+### Deployment Issues Encountered
+
+| Issue | Root Cause | Fix |
+|---|---|---|
+| Docker build error | TS parse failure on block-body arrow function | Changed to IIFE inside parenthesized return |
+| Healthcheck failing | `prisma db seed` crashed with `.ts` extension error | Added `--compiler-options {"module":"CommonJS"}` flag |
+| Empty jobs API | Demo data in seed file was empty | Added 3 companies + 3 jobs to seed |
+| CORS blocked | Trailing slash in `FRONTEND_URL` + single-origin only | Strip trailing slash + allow `localhost:3000` |
+| Auth header not updating | `useEffect` with `[]` deps never re-runs after login | `window.location.href` for hard navigation |
+
+---
+
+## 7. Current Architecture
+
+```
+┌──────────────┐     ┌──────────────────────────────────────┐
+│   Vercel     │     │           Railway                     │
+│  (Frontend)  │     │         (Backend)                     │
+│              │     │                                      │
+│  Next.js 14  │────▶│  NestJS API (port 4000)              │
+│  App Router  │     │    │                                  │
+│              │     │    ├─ PostgreSQL (Railway plugin)     │
+│              │     │    └─ Redis (Railway plugin)          │
+│              │     │                                      │
+│  /login      │     │  Startup flow:                       │
+│  /jobs       │     │  1. prisma migrate deploy            │
+│  /jobs/[id]  │     │  2. prisma db seed (idempotent)      │
+│  /           │     │  3. node dist/main                   │
+└──────────────┘     └──────────────────────────────────────┘
+```
+
+---
+
+## 8. Demo Accounts & URLs
+
+**Backend API**: `https://beleqet-interview-task-production.up.railway.app/api/v1`
+
+**Frontend**: `https://beleqet-interview-task-xi.vercel.app`
+
+### Demo Data
+- 47 job categories from the Prisma seed
+- 3 companies: TakaCash, ethio telecom, Zemen Bank
+- 3 published jobs: Full Stack Developer, Digital Marketing Specialist, UI/UX Designer
+
+### Registration
+Anyone can register at `/login` with email + password. No email verification required (dev mode).
+
+---
+
+## 9. Out of Scope (Deferred)
+
+| Item | Reason |
+|---|---|
+| **Auth context provider** | Token is in `localStorage` but no React context; protected routes not implemented |
+| **Search module** (OpenSearch) | Requires Elasticsearch infra + separate feature |
+| **Bull Board UI** | Queue management dashboard — low priority for demo |
+| **Git history secrets** | `91e14f8` needs `git filter-repo` + credential rotation |
+| **Email sending** | SMTP configured but `NODE_ENV=production` + no SMTP credentials on Railway |
+| **Telegram bot** | Bot token not set on Railway — notifications disabled |
+| **Chapa payments** | Test keys not configured — escrow flows untested in production |
+| **File uploads** | AWS S3 not configured — uploads will fail |
+| **OpenAI screening** | API key not set on Railway — AI-powered CV screening disabled |
+
+---
+
+## 10. Verification Checklist
+
+| Check | Result |
+|---|---|
+| Backend build (`npm run build`) | ✅ Passes |
+| Frontend build (`npm run build`) | ✅ Passes (22 pages) |
+| Docker compose builds | ✅ Passes |
+| All tests pass (22/22) | ✅ Passes |
+| `POST /auth/register` | ✅ 201 with JWT |
+| `POST /auth/login` | ✅ 200 with tokens |
+| Rate limiting (6 rapid logins) | ✅ 5 allowed, 6th blocked |
+| `GET /api/v1/jobs` | ✅ Returns 3 jobs with companies |
+| `GET /api/v1/jobs/categories` | ✅ Returns 47 categories |
+| CORS from Vercel | ✅ FRONTEND_URL set, trailing slash handled |
+| Healthcheck `/api/v1/jobs?limit=1` | ✅ Passes |
+| Login → Header shows "My Account" | ✅ |
+| Category filter updates URL | ✅ Uses slug, triggers re-fetch |
+| Mock fallback when API unreachable | ✅ All pages render gracefully |
+
+---
+
+## 11. File Summary
+
+### Backend (Phase 2)
 
 | File | Change |
-|------|--------|
-| `backend/src/app.module.ts` | Added `APP_GUARD` with `ThrottlerGuard`; simplified throttler config |
-| `backend/src/modules/auth/auth.controller.ts` | Applied `@Throttle()` with clarity comments |
-| `backend/src/modules/escrow/escrow.controller.ts` | Applied `@Throttle()` with clarity comment |
-| `backend/src/modules/escrow/escrow.processor.ts` | Enqueues to WALLET queue on auto-release |
-| `backend/src/modules/escrow/wallet.processor.ts` | Receives from WALLET queue (was orphaned) |
-| `backend/src/modules/chat/chat.gateway.ts` | Tightened CORS to `FRONTEND_URL` |
-| `backend/prisma/migrations/20260702000000_init/migration.sql` | CLI-generated (597 lines, 24 models, zero drift) |
-| `backend/package.json` | Removed `bull`/`@types/bull`; added `bull` devDep |
-| `backend/Dockerfile` | `prisma db push` → `prisma migrate deploy`; use `startup.sh` |
-| `backend/docker-compose.yml` | Healthchecks, `env_file`, wait-for-healthy |
+|---|---|
+| `backend/src/app.module.ts` | ThrottlerGuard + REDIS_URL parsing |
+| `backend/src/modules/auth/auth.controller.ts` | `@Throttle()` on 4 routes |
+| `backend/src/modules/escrow/escrow.controller.ts` | `@Throttle()` on callback |
+| `backend/src/modules/escrow/escrow.processor.ts` | WALLET queue enqueue |
+| `backend/src/modules/escrow/wallet.processor.ts` | Receives from WALLET queue |
+| `backend/src/modules/chat/chat.gateway.ts` | Tightened CORS |
+| `backend/prisma/migrations/` | Initial migration (597 lines, 24 models) |
+| `backend/package.json` | Bull dep removed, prisma seed config added |
+| `backend/Dockerfile` | startup.sh, migrate deploy |
+| `backend/docker-compose.yml` | Healthchecks, env_file |
+| `backend/startup.sh` | New: migrate → seed → start |
+| `backend/src/main.ts` | CORS multi-origin + trailing-slash fix |
 | `backend/webhook-server.js` | Secrets → env vars |
 | `backend/simulate.js` | Secrets → env vars |
-| `.gitignore` (root) | Added |
-| `backend/.env.example` | Cleaned dead vars, added `AWS_ENDPOINT`, `REDIS_URL` |
-| 4 spec files | Auth service, auth controller, wallet processor, escrow processor |
+| `backend/prisma/seed.ts` | Demo companies + jobs added |
+| `backend/.env.example` | Cleaned vars, REDIS_URL doc |
 
-### Phase 3 (Frontend deployment prep, backend polish)
+### Frontend (Phase 3)
 
 | File | Change |
-|------|--------|
-| `backend/src/app.module.ts` | Added `REDIS_URL` parsing for Railway compatibility |
-| `backend/startup.sh` | New: runs migrate → seed → start:prod |
-| `beleqet-jobs-nextjs/lib/config.ts` | New: `API_URL` from `NEXT_PUBLIC_API_URL` |
-| `beleqet-jobs-nextjs/lib/api.ts` | New: typed fetch wrapper with `fetchJobs()`, `fetchJob()` |
-| `beleqet-jobs-nextjs/app/login/page.tsx` | New: register/login form with JWT storage |
+|---|---|
+| `beleqet-jobs-nextjs/lib/config.ts` | New: API_URL from env |
+| `beleqet-jobs-nextjs/lib/api.ts` | New: fetchJobs, fetchJob, fetchCategories |
+| `beleqet-jobs-nextjs/app/login/page.tsx` | New: register/login form |
+| `beleqet-jobs-nextjs/components/Header.tsx` | Auth-aware client component |
 | `beleqet-jobs-nextjs/components/FeaturedJobs.tsx` | API-first, mock fallback |
-| `beleqet-jobs-nextjs/components/JobsListing.tsx` | API-first, mock fallback |
-| `beleqet-jobs-nextjs/components/JobCard.tsx` | Decoupled from strict mock data type |
+| `beleqet-jobs-nextjs/components/JobsListing.tsx` | API-first, URL-based category filtering |
+| `beleqet-jobs-nextjs/components/CategoryGrid.tsx` | API-first, slug-based links |
+| `beleqet-jobs-nextjs/components/StatsBar.tsx` | API-first, live counts |
+| `beleqet-jobs-nextjs/components/JobCard.tsx` | Decoupled from strict mock type |
 | `beleqet-jobs-nextjs/app/jobs/[id]/page.tsx` | API-first, mock fallback |
-| `beleqet-jobs-nextjs/.env.example` | New: documents `NEXT_PUBLIC_API_URL` |
-| `beleqet-jobs-nextjs/vercel.json` | New: explicit build/install/framework config |
+| `beleqet-jobs-nextjs/.env.example` | New |
+| `beleqet-jobs-nextjs/vercel.json` | New |
+| `beleqet-jobs-nextjs/.env.local` | New (gitignored) |
