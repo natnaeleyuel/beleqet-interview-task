@@ -50,6 +50,136 @@ async function main() {
   ]);
   console.log('✅ Freelance categories created');
 
+  // ── Demo Companies & Jobs ──────────────────────────────────────────────────
+  const itCat = await prisma.jobCategory.findFirst({ where: { slug: 'information-technology' } });
+  const marketingCat = await prisma.jobCategory.findFirst({ where: { slug: 'marketing-and-advertisement' } });
+  const designCat = await prisma.jobCategory.findFirst({ where: { slug: 'creative-art-and-design' } });
+
+  if (itCat) {
+    const employerUser = await prisma.user.upsert({
+      where: { email: 'hr@takacash.com' },
+      update: {},
+      create: {
+        email: 'hr@takacash.com',
+        passwordHash: await bcrypt.hash('demo123', 10),
+        firstName: 'Taka',
+        lastName: 'HR',
+        role: 'EMPLOYER',
+      },
+    });
+
+    const comp = await prisma.company.upsert({
+      where: { userId: employerUser.id },
+      update: {},
+      create: {
+        name: 'TakaCash',
+        description: 'Leading fintech company in Ethiopia',
+        userId: employerUser.id,
+        verified: true,
+      },
+    });
+
+    await prisma.job.upsert({
+      where: { id: 'demo-job-1' },
+      update: {},
+      create: {
+        id: 'demo-job-1',
+        title: 'Full Stack Developer',
+        description: 'Build customer-facing fintech products using React, Node.js, and PostgreSQL.',
+        location: 'Addis Ababa',
+        type: 'FULL_TIME' as any,
+        status: 'PUBLISHED' as any,
+        featured: true,
+        categoryId: itCat.id,
+        companyId: comp.id,
+      },
+    });
+  }
+
+  if (marketingCat) {
+    const ethioUser = await prisma.user.upsert({
+      where: { email: 'hr@ethiotelecom.com' },
+      update: {},
+      create: {
+        email: 'hr@ethiotelecom.com',
+        passwordHash: await bcrypt.hash('demo123', 10),
+        firstName: 'Ethio',
+        lastName: 'HR',
+        role: 'EMPLOYER',
+      },
+    });
+
+    const ethioComp = await prisma.company.upsert({
+      where: { userId: ethioUser.id },
+      update: {},
+      create: {
+        name: 'ethio telecom',
+        description: "Ethiopia's largest telecom provider",
+        userId: ethioUser.id,
+        verified: true,
+      },
+    });
+
+    await prisma.job.upsert({
+      where: { id: 'demo-job-2' },
+      update: {},
+      create: {
+        id: 'demo-job-2',
+        title: 'Digital Marketing Specialist',
+        description: 'Plan and execute digital campaigns across search, social, and Telegram channels.',
+        location: 'Addis Ababa',
+        type: 'HYBRID' as any,
+        status: 'PUBLISHED' as any,
+        featured: true,
+        categoryId: marketingCat.id,
+        companyId: ethioComp.id,
+      },
+    });
+  }
+
+  if (designCat) {
+    const zemenUser = await prisma.user.upsert({
+      where: { email: 'hr@zemenbank.com' },
+      update: {},
+      create: {
+        email: 'hr@zemenbank.com',
+        passwordHash: await bcrypt.hash('demo123', 10),
+        firstName: 'Zemen',
+        lastName: 'HR',
+        role: 'EMPLOYER',
+      },
+    });
+
+    const zemenComp = await prisma.company.upsert({
+      where: { userId: zemenUser.id },
+      update: {},
+      create: {
+        name: 'Zemen Bank',
+        description: 'Leading private bank in Ethiopia',
+        userId: zemenUser.id,
+        verified: true,
+      },
+    });
+
+    await prisma.job.upsert({
+      where: { id: 'demo-job-3' },
+      update: {},
+      create: {
+        id: 'demo-job-3',
+        title: 'UI/UX Designer',
+        description: 'Design intuitive digital banking experiences across web and mobile.',
+        location: 'Addis Ababa',
+        type: 'FULL_TIME' as any,
+        status: 'PUBLISHED' as any,
+        featured: true,
+        categoryId: designCat.id,
+        companyId: zemenComp.id,
+      },
+    });
+  }
+
+  console.log('✅ Demo companies and jobs created');
+
   console.log('\n🎉 Database seeded successfully with Production Categories!');
 }
 
