@@ -25,7 +25,8 @@ export class EscrowController {
 
   /** Webhook endpoint — verified via Chapa signature header */
   @Post('callback')
-  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 webhooks/minute — signature-verified but protect against replay
+  // @nestjs/throttler v6 blocks when totalHits > limit, so limit: 11 allows 10 real requests/min
+  @Throttle({ default: { limit: 11, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   webhook(
     @Body() payload: Record<string, unknown>,

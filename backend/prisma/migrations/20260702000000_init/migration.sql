@@ -31,7 +31,7 @@ CREATE TYPE "WalletTransactionType" AS ENUM ('CREDIT_PENDING', 'CREDIT_AVAILABLE
 -- CreateEnum
 CREATE TYPE "NotificationChannel" AS ENUM ('IN_APP', 'TELEGRAM', 'EMAIL');
 
--- CreateTable: users
+-- CreateTable
 CREATE TABLE "users" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE "users" (
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: refresh_tokens
+-- CreateTable
 CREATE TABLE "refresh_tokens" (
     "id" TEXT NOT NULL,
     "token" TEXT NOT NULL,
@@ -69,7 +69,7 @@ CREATE TABLE "refresh_tokens" (
     CONSTRAINT "refresh_tokens_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: verification_tokens
+-- CreateTable
 CREATE TABLE "verification_tokens" (
     "id" TEXT NOT NULL,
     "token" TEXT NOT NULL,
@@ -81,7 +81,7 @@ CREATE TABLE "verification_tokens" (
     CONSTRAINT "verification_tokens_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: companies
+-- CreateTable
 CREATE TABLE "companies" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -105,7 +105,7 @@ CREATE TABLE "companies" (
     CONSTRAINT "companies_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: job_categories
+-- CreateTable
 CREATE TABLE "job_categories" (
     "id" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
@@ -115,7 +115,7 @@ CREATE TABLE "job_categories" (
     CONSTRAINT "job_categories_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: jobs
+-- CreateTable
 CREATE TABLE "jobs" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -154,7 +154,7 @@ CREATE TABLE "jobs" (
     CONSTRAINT "jobs_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: job_questions
+-- CreateTable
 CREATE TABLE "job_questions" (
     "id" TEXT NOT NULL,
     "jobId" TEXT NOT NULL,
@@ -168,7 +168,7 @@ CREATE TABLE "job_questions" (
     CONSTRAINT "job_questions_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: applications
+-- CreateTable
 CREATE TABLE "applications" (
     "id" TEXT NOT NULL,
     "jobId" TEXT NOT NULL,
@@ -187,7 +187,7 @@ CREATE TABLE "applications" (
     CONSTRAINT "applications_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: candidate_scores
+-- CreateTable
 CREATE TABLE "candidate_scores" (
     "id" TEXT NOT NULL,
     "applicationId" TEXT NOT NULL,
@@ -204,7 +204,7 @@ CREATE TABLE "candidate_scores" (
     CONSTRAINT "candidate_scores_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: freelance_categories
+-- CreateTable
 CREATE TABLE "freelance_categories" (
     "id" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
@@ -214,7 +214,7 @@ CREATE TABLE "freelance_categories" (
     CONSTRAINT "freelance_categories_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: freelance_jobs
+-- CreateTable
 CREATE TABLE "freelance_jobs" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -226,7 +226,7 @@ CREATE TABLE "freelance_jobs" (
     "currency" TEXT NOT NULL DEFAULT 'ETB',
     "pricingType" TEXT NOT NULL DEFAULT 'FIXED',
     "deadlineDays" INTEGER NOT NULL,
-    "skills" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "skills" TEXT[],
     "status" "FreelanceJobStatus" NOT NULL DEFAULT 'DRAFT',
     "featured" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -238,7 +238,7 @@ CREATE TABLE "freelance_jobs" (
     CONSTRAINT "freelance_jobs_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: bids
+-- CreateTable
 CREATE TABLE "bids" (
     "id" TEXT NOT NULL,
     "freelanceJobId" TEXT NOT NULL,
@@ -254,7 +254,7 @@ CREATE TABLE "bids" (
     CONSTRAINT "bids_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: contracts
+-- CreateTable
 CREATE TABLE "contracts" (
     "id" TEXT NOT NULL,
     "freelanceJobId" TEXT NOT NULL,
@@ -270,7 +270,7 @@ CREATE TABLE "contracts" (
     CONSTRAINT "contracts_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: milestones
+-- CreateTable
 CREATE TABLE "milestones" (
     "id" TEXT NOT NULL,
     "contractId" TEXT NOT NULL,
@@ -286,7 +286,7 @@ CREATE TABLE "milestones" (
     CONSTRAINT "milestones_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: deliverables
+-- CreateTable
 CREATE TABLE "deliverables" (
     "id" TEXT NOT NULL,
     "milestoneId" TEXT NOT NULL,
@@ -297,7 +297,7 @@ CREATE TABLE "deliverables" (
     CONSTRAINT "deliverables_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: escrow_transactions
+-- CreateTable
 CREATE TABLE "escrow_transactions" (
     "id" TEXT NOT NULL,
     "freelanceJobId" TEXT NOT NULL,
@@ -316,7 +316,7 @@ CREATE TABLE "escrow_transactions" (
     CONSTRAINT "escrow_transactions_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: freelancer_wallets
+-- CreateTable
 CREATE TABLE "freelancer_wallets" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -328,7 +328,7 @@ CREATE TABLE "freelancer_wallets" (
     CONSTRAINT "freelancer_wallets_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: wallet_transactions
+-- CreateTable
 CREATE TABLE "wallet_transactions" (
     "id" TEXT NOT NULL,
     "walletId" TEXT NOT NULL,
@@ -341,13 +341,13 @@ CREATE TABLE "wallet_transactions" (
     CONSTRAINT "wallet_transactions_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: disputes
+-- CreateTable
 CREATE TABLE "disputes" (
     "id" TEXT NOT NULL,
     "contractId" TEXT NOT NULL,
     "raisedById" TEXT NOT NULL,
     "reason" TEXT NOT NULL,
-    "evidenceUrls" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "evidenceUrls" TEXT[],
     "resolution" TEXT,
     "resolvedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -356,7 +356,7 @@ CREATE TABLE "disputes" (
     CONSTRAINT "disputes_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: notifications
+-- CreateTable
 CREATE TABLE "notifications" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -371,20 +371,20 @@ CREATE TABLE "notifications" (
     CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: events_log
+-- CreateTable
 CREATE TABLE "events_log" (
     "id" TEXT NOT NULL,
     "eventType" TEXT NOT NULL,
     "entityId" TEXT NOT NULL,
     "entityType" TEXT NOT NULL,
-    "payload" JSONB,
+    "payload" JSONB NOT NULL,
     "processedBy" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "events_log_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: chat_rooms
+-- CreateTable
 CREATE TABLE "chat_rooms" (
     "id" TEXT NOT NULL,
     "contractId" TEXT,
@@ -395,7 +395,7 @@ CREATE TABLE "chat_rooms" (
     CONSTRAINT "chat_rooms_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: chat_participants
+-- CreateTable
 CREATE TABLE "chat_participants" (
     "id" TEXT NOT NULL,
     "roomId" TEXT NOT NULL,
@@ -406,7 +406,7 @@ CREATE TABLE "chat_participants" (
     CONSTRAINT "chat_participants_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: messages
+-- CreateTable
 CREATE TABLE "messages" (
     "id" TEXT NOT NULL,
     "roomId" TEXT NOT NULL,
@@ -418,65 +418,180 @@ CREATE TABLE "messages" (
     CONSTRAINT "messages_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndexes
+-- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "users_telegramId_key" ON "users"("telegramId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "refresh_tokens_token_key" ON "refresh_tokens"("token");
+
+-- CreateIndex
 CREATE INDEX "refresh_tokens_userId_idx" ON "refresh_tokens"("userId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "verification_tokens_token_key" ON "verification_tokens"("token");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "companies_userId_key" ON "companies"("userId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "job_categories_slug_key" ON "job_categories"("slug");
+
+-- CreateIndex
 CREATE INDEX "jobs_title_location_idx" ON "jobs"("title", "location");
+
+-- CreateIndex
 CREATE INDEX "jobs_status_featured_idx" ON "jobs"("status", "featured");
+
+-- CreateIndex
 CREATE INDEX "jobs_companyId_status_idx" ON "jobs"("companyId", "status");
+
+-- CreateIndex
 CREATE INDEX "jobs_categoryId_status_idx" ON "jobs"("categoryId", "status");
+
+-- CreateIndex
 CREATE INDEX "jobs_expiryDate_idx" ON "jobs"("expiryDate");
+
+-- CreateIndex
 CREATE INDEX "job_questions_jobId_idx" ON "job_questions"("jobId");
-CREATE UNIQUE INDEX "applications_jobId_userId_key" ON "applications"("jobId", "userId");
+
+-- CreateIndex
 CREATE INDEX "applications_userId_status_idx" ON "applications"("userId", "status");
+
+-- CreateIndex
 CREATE INDEX "applications_jobId_status_idx" ON "applications"("jobId", "status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "applications_jobId_userId_key" ON "applications"("jobId", "userId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "candidate_scores_applicationId_key" ON "candidate_scores"("applicationId");
+
+-- CreateIndex
 CREATE INDEX "candidate_scores_userId_idx" ON "candidate_scores"("userId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "freelance_categories_slug_key" ON "freelance_categories"("slug");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "bids_freelanceJobId_freelancerId_key" ON "bids"("freelanceJobId", "freelancerId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "contracts_freelanceJobId_key" ON "contracts"("freelanceJobId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "escrow_transactions_freelanceJobId_key" ON "escrow_transactions"("freelanceJobId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "freelancer_wallets_userId_key" ON "freelancer_wallets"("userId");
+
+-- CreateIndex
 CREATE INDEX "wallet_transactions_walletId_createdAt_idx" ON "wallet_transactions"("walletId", "createdAt");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "disputes_contractId_key" ON "disputes"("contractId");
+
+-- CreateIndex
 CREATE INDEX "notifications_userId_read_idx" ON "notifications"("userId", "read");
+
+-- CreateIndex
 CREATE INDEX "notifications_userId_createdAt_idx" ON "notifications"("userId", "createdAt");
+
+-- CreateIndex
 CREATE INDEX "events_log_eventType_entityId_idx" ON "events_log"("eventType", "entityId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "chat_rooms_contractId_key" ON "chat_rooms"("contractId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "chat_participants_roomId_userId_key" ON "chat_participants"("roomId", "userId");
+
+-- CreateIndex
 CREATE INDEX "messages_roomId_createdAt_idx" ON "messages"("roomId", "createdAt");
 
--- AddForeignKeys
+-- AddForeignKey
 ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "verification_tokens" ADD CONSTRAINT "verification_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "companies" ADD CONSTRAINT "companies_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "jobs" ADD CONSTRAINT "jobs_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "job_categories"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "jobs" ADD CONSTRAINT "jobs_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "companies"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "job_questions" ADD CONSTRAINT "job_questions_jobId_fkey" FOREIGN KEY ("jobId") REFERENCES "jobs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "applications" ADD CONSTRAINT "applications_jobId_fkey" FOREIGN KEY ("jobId") REFERENCES "jobs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "applications" ADD CONSTRAINT "applications_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "candidate_scores" ADD CONSTRAINT "candidate_scores_applicationId_fkey" FOREIGN KEY ("applicationId") REFERENCES "applications"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "candidate_scores" ADD CONSTRAINT "candidate_scores_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "freelance_jobs" ADD CONSTRAINT "freelance_jobs_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "freelance_categories"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "freelance_jobs" ADD CONSTRAINT "freelance_jobs_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "bids" ADD CONSTRAINT "bids_freelanceJobId_fkey" FOREIGN KEY ("freelanceJobId") REFERENCES "freelance_jobs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "bids" ADD CONSTRAINT "bids_freelancerId_fkey" FOREIGN KEY ("freelancerId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "contracts" ADD CONSTRAINT "contracts_freelanceJobId_fkey" FOREIGN KEY ("freelanceJobId") REFERENCES "freelance_jobs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_freelanceJobId_fkey" FOREIGN KEY ("freelanceJobId") REFERENCES "freelance_jobs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_freelancerId_fkey" FOREIGN KEY ("freelancerId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "milestones" ADD CONSTRAINT "milestones_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "contracts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "deliverables" ADD CONSTRAINT "deliverables_milestoneId_fkey" FOREIGN KEY ("milestoneId") REFERENCES "milestones"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "escrow_transactions" ADD CONSTRAINT "escrow_transactions_freelanceJobId_fkey" FOREIGN KEY ("freelanceJobId") REFERENCES "freelance_jobs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "freelancer_wallets" ADD CONSTRAINT "freelancer_wallets_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "wallet_transactions" ADD CONSTRAINT "wallet_transactions_walletId_fkey" FOREIGN KEY ("walletId") REFERENCES "freelancer_wallets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "disputes" ADD CONSTRAINT "disputes_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "contracts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "chat_participants" ADD CONSTRAINT "chat_participants_roomId_fkey" FOREIGN KEY ("roomId") REFERENCES "chat_rooms"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "chat_participants" ADD CONSTRAINT "chat_participants_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "messages" ADD CONSTRAINT "messages_roomId_fkey" FOREIGN KEY ("roomId") REFERENCES "chat_rooms"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "messages" ADD CONSTRAINT "messages_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+

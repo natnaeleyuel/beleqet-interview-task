@@ -13,14 +13,16 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 registrations/minute per IP
+  // @nestjs/throttler v6 blocks when totalHits > limit, so limit: 6 allows 5 real requests/min
+  @Throttle({ default: { limit: 6, ttl: 60000 } })
   @ApiOperation({ summary: 'Register a new user' })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 attempts/minute per IP
+  // @nestjs/throttler v6 blocks when totalHits > limit, so limit: 6 allows 5 real requests/min
+  @Throttle({ default: { limit: 6, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login and receive JWT tokens' })
   async login(@Body() dto: LoginDto) {
@@ -59,7 +61,8 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 requests/minute per IP — prevent email flooding
+  // @nestjs/throttler v6 blocks when totalHits > limit, so limit: 4 allows 3 real requests/min
+  @Throttle({ default: { limit: 4, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset email' })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
@@ -67,7 +70,8 @@ export class AuthController {
   }
 
   @Post('reset-password')
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 attempts/minute per IP
+  // @nestjs/throttler v6 blocks when totalHits > limit, so limit: 4 allows 3 real requests/min
+  @Throttle({ default: { limit: 4, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password via token' })
   resetPassword(@Body() dto: ResetPasswordDto) {

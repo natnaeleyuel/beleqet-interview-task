@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { BullModule } from '@nestjs/bull';
 
@@ -30,11 +31,12 @@ import { TelegramModule } from './modules/telegram/telegram.module';
     }),
 
     // ── Rate limiting ──────────────────────────────────────────────────────
-    ThrottlerModule.forRoot([
-      { name: 'short',  ttl: 1_000,  limit: 10  },
-      { name: 'medium', ttl: 10_000, limit: 50  },
-      { name: 'long',   ttl: 60_000, limit: 200 },
-    ]),
+    // Global guard uses a single unnamed throttler (implicitly named "default").
+    // Routes opt into stricter limits via @Throttle({ default: { limit, ttl } }) —
+    // see AuthController (5 req/min) and EscrowController callback (10 req/min).
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60_000, limit: 100 }],
+    }),
 
     // ── Event bus (in-process events between modules) ──────────────────────
     EventEmitterModule.forRoot({
@@ -79,6 +81,9 @@ import { TelegramModule } from './modules/telegram/telegram.module';
     ChatModule,
     UploadsModule,
     TelegramModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}
