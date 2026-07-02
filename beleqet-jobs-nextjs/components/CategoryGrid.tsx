@@ -31,6 +31,7 @@ function getIcon(icon: string | null | undefined): LucideIcon {
 
 type CategoryDisplay = {
   id: string;
+  slug?: string;
   label: string;
   count: string;
   icon: LucideIcon;
@@ -43,13 +44,13 @@ export default function CategoryGrid() {
     fetchCategories()
       .then((cats: ApiCategory[]) =>
         setApiCategories(
-          cats.map((c: ApiCategory) => ({ id: c.id, label: c.label, count: "0", icon: getIcon(c.icon) }))
+          cats.map((c: ApiCategory) => ({ id: c.id, slug: c.slug, label: c.label, count: "0", icon: getIcon(c.icon) }))
         )
       )
       .catch(() => {});
   }, []);
 
-  const displayCategories = apiCategories ?? fallbackCategories.map((c) => ({
+  const displayCategories: CategoryDisplay[] = apiCategories ?? fallbackCategories.map((c) => ({
     id: c.id,
     label: c.label,
     count: c.count,
@@ -72,7 +73,7 @@ export default function CategoryGrid() {
         {displayCategories.slice(0, 14).map((cat) => (
           <Link
             key={cat.id}
-            href={`/jobs?category=${cat.id}`}
+            href={`/jobs?category=${cat.slug ?? cat.id}`}
             className="flex flex-col items-center text-center gap-2 rounded-xl border border-border bg-white px-3 py-5 hover:border-brandGreen hover:shadow-card transition-all"
           >
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-brandGreen/10 text-brandGreen">

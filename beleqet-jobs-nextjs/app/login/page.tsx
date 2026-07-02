@@ -51,11 +51,10 @@ export default function LoginPage() {
       }
 
       const data: LoginResponse = await res.json();
-      localStorage.setItem('beleqat_token', data.accessToken);
-      localStorage.setItem('beleqat_refresh', data.refreshToken);
-      localStorage.setItem('beleqat_user', JSON.stringify(data.user));
-      router.push('/');
-      router.refresh();
+      localStorage.setItem('beleqet_token', data.accessToken);
+      localStorage.setItem('beleqet_refresh', data.refreshToken);
+      localStorage.setItem('beleqet_user', JSON.stringify(data.user));
+      window.location.href = '/';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, MapPin, SlidersHorizontal } from 'lucide-react';
 import { jobs as mockJobs, categories as mockCategories } from '@/lib/mockData';
 import { fetchJobs, fetchCategories, type ApiJob, type ApiCategory } from '@/lib/api';
@@ -44,30 +44,39 @@ function formatRelativeTime(dateStr: string): string {
 type DisplayJob = ReturnType<typeof mapApiJob>;
 
 export default function JobsListing() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [apiJobs, setApiJobs] = useState<DisplayJob[] | null>(null);
-  const [apiCategories, setApiCategories] = useState<{ id: string; label: string; count?: string }[] | null>(null);
+  const [apiCategories, setApiCategories] = useState<{ id: string; slug: string; label: string; count?: string }[] | null>(null);
+
+  const q = searchParams.get('q') ?? '';
+  const loc = searchParams.get('loc') ?? '';
+  const catSlug = searchParams.get('category') ?? '';
 
   useEffect(() => {
     const params: Record<string, string> = {};
-    const q = searchParams.get('q');
-    const loc = searchParams.get('loc');
-    const cat = searchParams.get('category');
     if (q) params.q = q;
     if (loc) params.location = loc;
-    if (cat) params.category = cat;
+    if (catSlug) params.category = catSlug;
     fetchJobs(params)
       .then((data) => setApiJobs(data.items.map(mapApiJob)))
       .catch(() => setApiJobs([]));
     fetchCategories()
-      .then((cats: ApiCategory[]) => setApiCategories(cats.map((c: ApiCategory) => ({ id: c.id, label: c.label }))))
+      .then((cats: ApiCategory[]) => setApiCategories(cats.map((c: ApiCategory) => ({ id: c.id, slug: c.slug, label: c.label }))))
       .catch(() => setApiCategories([]));
-  }, []);
+  }, [q, loc, catSlug]);
 
-  const [query, setQuery] = useState(searchParams.get('q') ?? '');
-  const [location, setLocation] = useState(searchParams.get('loc') ?? '');
-  const [category, setCategory] = useState(searchParams.get('category') ?? '');
+  const [query, setQuery] = useState(q);
+  const [location, setLocation] = useState(loc);
   const [type, setType] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  const handleSearch = () => {
+    const p = new URLSearchParams();
+    if (query) p.set('q', query);
+    if (location) p.set('loc', location);
+    router.push(`/jobs?${p.toString()}`);
+  };
 
   const jobs = apiJobs ?? fallbackJobs;
 
@@ -78,11 +87,11 @@ export default function JobsListing() {
         job.title.toLowerCase().includes(query.toLowerCase()) ||
         job.company.toLowerCase().includes(query.toLowerCase());
       const matchesLocation = !location || job.location.toLowerCase().includes(location.toLowerCase());
-      const matchesCategory = !category || job.category === category;
+      const matchesCategory = !catSlug || job.category === catSlug;
       const matchesType = !type || job.type === type;
       return matchesQuery && matchesLocation && matchesCategory && matchesType;
     });
-  }, [query, location, category, type, jobs]);
+  }, [query, location, catSlug, type, jobs]);
 
   return (
     <div className="container-page py-10">
@@ -97,6 +106,7 @@ export default function JobsListing() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             placeholder="Job title, keyword or company"
             className="w-full text-sm text-ink placeholder:text-muted outline-none"
           />
@@ -107,10 +117,17 @@ export default function JobsListing() {
           <input
             value={location}
             onChange={(e) => setLocation(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             placeholder="Location"
             className="w-full text-sm text-ink placeholder:text-muted outline-none"
           />
         </div>
+        <button
+          onClick={handleSearch}
+          className="bg-brandGreen text-white rounded-xl px-6 py-2.5 text-sm font-semibold hover:bg-darkGreen transition-colors"
+        >
+          Search
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-8">
@@ -121,25 +138,38 @@ export default function JobsListing() {
             </h3>
             <div className="space-y-2">
               <button
-                onClick={() => setCategory('')}
+                onClick={() => {
+                  const p = new URLSearchParams(searchParams.toString());
+                  p.delete('category');
+                  router.push(`/jobs?${p.toString()}`);
+                }}
                 className={`block w-full text-left text-sm px-3 py-2 rounded-lg transition-colors ${
-                  category === '' ? 'bg-brandGreen/10 text-brandGreen font-semibold' : 'text-muted hover:bg-pageBg'
+                  !catSlug ? 'bg-brandGreen/10 text-brandGreen font-semibold' : 'text-muted hover:bg-pageBg'
                 }`}
               >
                 All Categories
               </button>
-              {(apiCategories ?? mockCategories).map((cat) => (
+              {(apiCategories ?? mockCategories).map((cat) => {
+                const slug = 'slug' in cat ? (cat as { slug: string }).slug : null;
+                return (
                 <button
                   key={cat.id}
-                  onClick={() => setCategory(cat.id)}
+                  onClick={() => {
+                    if (slug) {
+                      const p = new URLSearchParams(searchParams.toString());
+                      p.set('category', slug);
+                      router.push(`/jobs?${p.toString()}`);
+                    }
+                  }}
                   className={`flex w-full items-center justify-between text-left text-sm px-3 py-2 rounded-lg transition-colors ${
-                    category === cat.id ? 'bg-brandGreen/10 text-brandGreen font-semibold' : 'text-muted hover:bg-pageBg'
+                    catSlug === slug ? 'bg-brandGreen/10 text-brandGreen font-semibold' : 'text-muted hover:bg-pageBg'
                   }`}
                 >
                   <span>{cat.label}</span>
                   {'count' in cat && cat.count ? <span className="text-xs">{cat.count}</span> : null}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
 
