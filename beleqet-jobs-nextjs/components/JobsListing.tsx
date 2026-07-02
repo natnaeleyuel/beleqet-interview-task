@@ -1,20 +1,71 @@
-"use client";
+'use client';
 
-import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { Search, MapPin, SlidersHorizontal } from "lucide-react";
-import { jobs, categories } from "@/lib/mockData";
-import JobCard from "@/components/JobCard";
+import { useMemo, useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Search, MapPin, SlidersHorizontal } from 'lucide-react';
+import { jobs as mockJobs, categories } from '@/lib/mockData';
+import { fetchJobs, type ApiJob } from '@/lib/api';
+import JobCard from '@/components/JobCard';
 
-const jobTypes = ["Full Time", "Part Time", "Remote", "Hybrid", "On-site", "Contract"];
+const jobTypes = ['Full Time', 'Part Time', 'Remote', 'Hybrid', 'On-site', 'Contract'];
+const fallbackJobs = mockJobs.map((j) => ({ ...j }));
+
+function mapApiJob(j: ApiJob) {
+  const typeMap: Record<string, string> = {
+    FULL_TIME: 'Full Time',
+    PART_TIME: 'Part Time',
+    REMOTE: 'Remote',
+    HYBRID: 'Hybrid',
+    CONTRACT: 'Contract',
+  };
+  return {
+    id: j.id,
+    title: j.title,
+    company: j.company?.name || j.companyName || '',
+    location: j.location,
+    type: typeMap[j.type] || 'Full Time',
+    category: j.category?.slug || '',
+    postedAgo: formatRelativeTime(j.createdAt),
+    featured: j.featured ?? false,
+    description: j.description ?? '',
+    tags: j.tags ?? [],
+  };
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 1) return 'Just now';
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+type DisplayJob = ReturnType<typeof mapApiJob>;
 
 export default function JobsListing() {
   const searchParams = useSearchParams();
+  const [apiJobs, setApiJobs] = useState<DisplayJob[] | null>(null);
 
-  const [query, setQuery] = useState(searchParams.get("q") ?? "");
-  const [location, setLocation] = useState(searchParams.get("loc") ?? "");
-  const [category, setCategory] = useState(searchParams.get("category") ?? "");
-  const [type, setType] = useState<string>("");
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    const q = searchParams.get('q');
+    const loc = searchParams.get('loc');
+    const cat = searchParams.get('category');
+    if (q) params.q = q;
+    if (loc) params.location = loc;
+    if (cat) params.category = cat;
+    fetchJobs(params)
+      .then((data) => setApiJobs(data.items.map(mapApiJob)))
+      .catch(() => setApiJobs([]));
+  }, []);
+
+  const [query, setQuery] = useState(searchParams.get('q') ?? '');
+  const [location, setLocation] = useState(searchParams.get('loc') ?? '');
+  const [category, setCategory] = useState(searchParams.get('category') ?? '');
+  const [type, setType] = useState<string>('');
+
+  const jobs = apiJobs ?? fallbackJobs;
 
   const filtered = useMemo(() => {
     return jobs.filter((job) => {
@@ -27,7 +78,7 @@ export default function JobsListing() {
       const matchesType = !type || job.type === type;
       return matchesQuery && matchesLocation && matchesCategory && matchesType;
     });
-  }, [query, location, category, type]);
+  }, [query, location, category, type, jobs]);
 
   return (
     <div className="container-page py-10">
@@ -66,9 +117,9 @@ export default function JobsListing() {
             </h3>
             <div className="space-y-2">
               <button
-                onClick={() => setCategory("")}
+                onClick={() => setCategory('')}
                 className={`block w-full text-left text-sm px-3 py-2 rounded-lg transition-colors ${
-                  category === "" ? "bg-brandGreen/10 text-brandGreen font-semibold" : "text-muted hover:bg-pageBg"
+                  category === '' ? 'bg-brandGreen/10 text-brandGreen font-semibold' : 'text-muted hover:bg-pageBg'
                 }`}
               >
                 All Categories
@@ -78,7 +129,7 @@ export default function JobsListing() {
                   key={cat.id}
                   onClick={() => setCategory(cat.id)}
                   className={`flex w-full items-center justify-between text-left text-sm px-3 py-2 rounded-lg transition-colors ${
-                    category === cat.id ? "bg-brandGreen/10 text-brandGreen font-semibold" : "text-muted hover:bg-pageBg"
+                    category === cat.id ? 'bg-brandGreen/10 text-brandGreen font-semibold' : 'text-muted hover:bg-pageBg'
                   }`}
                 >
                   <span>{cat.label}</span>
@@ -92,9 +143,9 @@ export default function JobsListing() {
             <h3 className="text-sm font-semibold text-ink mb-4">Job Type</h3>
             <div className="space-y-2">
               <button
-                onClick={() => setType("")}
+                onClick={() => setType('')}
                 className={`block w-full text-left text-sm px-3 py-2 rounded-lg transition-colors ${
-                  type === "" ? "bg-brandGreen/10 text-brandGreen font-semibold" : "text-muted hover:bg-pageBg"
+                  type === '' ? 'bg-brandGreen/10 text-brandGreen font-semibold' : 'text-muted hover:bg-pageBg'
                 }`}
               >
                 All Types
@@ -104,7 +155,7 @@ export default function JobsListing() {
                   key={t}
                   onClick={() => setType(t)}
                   className={`block w-full text-left text-sm px-3 py-2 rounded-lg transition-colors ${
-                    type === t ? "bg-brandGreen/10 text-brandGreen font-semibold" : "text-muted hover:bg-pageBg"
+                    type === t ? 'bg-brandGreen/10 text-brandGreen font-semibold' : 'text-muted hover:bg-pageBg'
                   }`}
                 >
                   {t}
@@ -115,7 +166,11 @@ export default function JobsListing() {
         </aside>
 
         <div>
-          {filtered.length === 0 ? (
+          {apiJobs === null ? (
+            <div className="rounded-xl border border-border bg-white p-12 text-center">
+              <p className="text-ink font-semibold">Loading jobs…</p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-white p-12 text-center">
               <p className="text-ink font-semibold">No jobs match your filters</p>
               <p className="text-sm text-muted mt-1">Try adjusting your search or clearing filters.</p>
