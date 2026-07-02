@@ -1,0 +1,9 @@
+{
+  "version": "5.18.0",
+  "steps": [
+    {
+      "tag": "CreateMigration",
+      "migration_name": "20260702000000_init"
+    }
+  ]
+}

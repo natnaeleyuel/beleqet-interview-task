@@ -1,4 +1,12 @@
-const payload = {
+// =============================================================================
+// DEV/TEST UTILITY — Simulates a Chapa webhook callback to the NestJS API.
+// NOT part of the NestJS application. NEVER commit real secrets here.
+// The HMAC signature is computed dynamically from CHAPA_WEBHOOK_SECRET.
+// =============================================================================
+
+const crypto = require('crypto');
+
+const payload = JSON.stringify({
   "event": "charge.success",
   "first_name": "Test",
   "last_name": "User",
@@ -22,12 +30,13 @@ const payload = {
   "meta": null,
   "created_at": "2026-06-23T12:14:16.000000Z",
   "updated_at": "2026-06-23T12:14:16.000000Z"
-};
+});
 
-const signature = "a423b17f8b602e66ab6b9c6a1923ac259a3fa86ab1c7b5754ed72e781daa6d7c";
+const webhookSecret = process.env.CHAPA_WEBHOOK_SECRET || 'your_webhook_secret';
+const signature = crypto.createHmac('sha256', webhookSecret).update(payload).digest('hex');
 
 async function simulate() {
-  console.log('Sending exact Chapa payload to localhost:4000...');
+  console.log('Sending Chapa payload to localhost:4000...');
   try {
     const res = await fetch('http://localhost:4000/api/v1/escrow/callback', {
       method: 'POST',
@@ -35,10 +44,10 @@ async function simulate() {
         'Content-Type': 'application/json',
         'x-chapa-signature': signature
       },
-      body: JSON.stringify(payload)
+      body: payload
     });
     const text = await res.text();
-    console.log('Response from webhook-server:', text);
+    console.log('Response:', text);
   } catch (err) {
     console.error(err);
   }

@@ -1,21 +1,15 @@
 import { Processor, Process } from '@nestjs/bull';
 import { Logger, Injectable } from '@nestjs/common';
-import { Job as BullJob } from 'bull';
+import { Job as BullJob } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
-import { QUEUE_NAMES } from '../queues/queues.constants';
+import { QUEUE_NAMES, WALLET_JOBS } from '../queues/queues.constants';
 
 interface ReleasePendingPayload {
-  walletId: string;
   userId: string;
   amount: number;
   milestoneId?: string;
 }
 
-/**
- * WalletProcessor — consumes the WALLET queue.
- * Handles any wallet-specific background tasks that are not
- * already covered by EscrowProcessor (e.g. admin-triggered adjustments).
- */
 @Injectable()
 @Processor(QUEUE_NAMES.WALLET)
 export class WalletProcessor {
@@ -23,24 +17,31 @@ export class WalletProcessor {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  @Process('release-pending')
+  @Process(WALLET_JOBS.RELEASE_PENDING)
   async handleReleasePending(job: BullJob<ReleasePendingPayload>) {
-    const { walletId, userId, amount, milestoneId } = job.data;
+    const { userId, amount, milestoneId } = job.data;
 
-    await this.prisma.freelancerWallet.update({
-      where: { id: walletId },
-      data: {
+    const wallet = await this.prisma.freelancerWallet.upsert({
+      where: { userId },
+      update: {
         pendingBalance:   { decrement: amount },
         availableBalance: { increment: amount },
+      },
+      create: {
+        userId,
+        pendingBalance: 0,
+        availableBalance: amount,
       },
     });
 
     await this.prisma.walletTransaction.create({
       data: {
-        walletId,
+        walletId: wallet.id,
         type: 'CREDIT_AVAILABLE',
         amount,
-        note: 'Hold period cleared',
+        note: milestoneId
+          ? `Milestone payout cleared — 3-day hold complete`
+          : 'Hold period cleared',
         milestoneId,
       },
     });

@@ -1,6 +1,6 @@
 import { Processor, Process } from '@nestjs/bull';
 import { Logger, Injectable } from '@nestjs/common';
-import { Job as BullJob } from 'bull';
+import { Job as BullJob } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QUEUE_NAMES } from '../queues/queues.constants';
 

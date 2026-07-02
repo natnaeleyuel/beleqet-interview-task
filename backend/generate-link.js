@@ -1,3 +1,9 @@
+// =============================================================================
+// DEV/TEST UTILITY — Generates a Chapa checkout link pointing at your Ngrok URL.
+// NOT part of the NestJS application. NEVER commit real secrets here.
+// Chapa secret is read from CHAPA_SECRET_KEY env var.
+// =============================================================================
+
 const ngrokUrl = process.argv[2];
 
 if (!ngrokUrl) {
@@ -6,7 +12,7 @@ if (!ngrokUrl) {
   process.exit(1);
 }
 
-const CHAPA_SECRET = 'process.env.CHAPA_SECRET_KEY || 'REPLACE_WITH_YOUR_CHAPA_KEY'';
+const CHAPA_SECRET = process.env.CHAPA_SECRET_KEY;
 
 async function generateLink() {
   console.log(`Generating checkout link with callback: ${ngrokUrl}/api/v1/escrow/callback`);

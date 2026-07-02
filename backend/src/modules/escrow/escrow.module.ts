@@ -10,6 +10,7 @@ import { EscrowProcessor } from './escrow.processor';
     BullModule.registerQueue(
       { name: QUEUE_NAMES.ESCROW },
       { name: QUEUE_NAMES.NOTIFICATIONS },
+      { name: QUEUE_NAMES.WALLET },
     ),
   ],
   providers: [EscrowService, EscrowProcessor],

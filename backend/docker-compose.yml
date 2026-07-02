@@ -13,6 +13,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U beleqet_user -d beleqet_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -22,6 +27,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   backend:
     build:
@@ -31,24 +41,26 @@ services:
     restart: unless-stopped
     ports:
       - "4000:4000"
+    env_file:
+      - .env
     environment:
-      - NODE_ENV=development
-      - PORT=4000
-      - FRONTEND_URL=http://localhost:3000
+      # Docker-network overrides — .env values use localhost, but within
+      # compose the services are reachable by their container names.
       - DATABASE_URL=postgresql://beleqet_user:your_password@db:5432/beleqet_db
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=
-      - REDIS_TLS=false
       - JWT_ACCESS_SECRET=docker_default_secret_please_change_in_production
-      - JWT_ACCESS_EXPIRES=15m
-      - JWT_REFRESH_EXPIRES=30d
-      - BULL_BOARD_USERNAME=admin
-      - BULL_BOARD_PASSWORD=admin
       - OPENAI_API_KEY=dummy_key_for_testing
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Note: The Next.js frontend (beleqet-jobs-nextjs/) does NOT have a Docker
+  # service. It is designed to run standalone (npm run dev) connecting to the
+  # backend at http://localhost:4000. This is intentional — the frontend is
+  # a separate deployment unit and out of scope for this compose file.
 
 volumes:
   postgres_data:

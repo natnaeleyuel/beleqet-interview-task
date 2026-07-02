@@ -1,5 +1,6 @@
 // escrow.controller.ts
 import { Controller, Post, Body, Param, UseGuards, HttpCode, HttpStatus, Req, Headers, UnauthorizedException } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser, CurrentUserPayload } from '../../common/decorators/current-user.decorator';
@@ -24,6 +25,8 @@ export class EscrowController {
 
   /** Webhook endpoint — verified via Chapa signature header */
   @Post('callback')
+  // @nestjs/throttler v6 blocks when totalHits > limit, so limit: 11 allows 10 real requests/min
+  @Throttle({ default: { limit: 11, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   webhook(
     @Body() payload: Record<string, unknown>,

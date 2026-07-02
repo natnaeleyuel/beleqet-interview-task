@@ -5,8 +5,9 @@
 ## Quick Start
 
 ```bash
-# 1. Start Postgres + Redis
-docker-compose up -d   # run from the project root (one level up)
+# 1. Start Postgres + Redis + API
+cd backend
+docker compose up -d
 
 # 2. Set up environment
 cp .env.example .env
@@ -290,4 +291,39 @@ npm run prisma:seed     # Seed demo data
 npm run prisma:studio   # Open Prisma Studio (DB GUI)
 npm run test            # Run unit tests
 npm run test:cov        # Test coverage report
+```
+
+---
+
+## Phase 2 — Engineering Notes
+
+### What was fixed
+
+| Task | Summary |
+|------|---------|
+| **Security** | Removed hardcoded Chapa secrets from dev scripts (`webhook-server.js`, `simulate.js`); added root `.gitignore`; removed dead env vars; added `AWS_ENDPOINT` to `.env.example` |
+| **Wallet wiring** | Connected `WalletProcessor` to the event chain — `EscrowProcessor` now enqueues `release-pending` jobs to the `WALLET` queue instead of updating wallet balances directly (cleaner separation of concerns) |
+| **BullMQ imports** | Standardized all `'bull'` imports to `'bullmq'`; removed unused `bull` + `@types/bull` deps; replaced two `job.queue.add()` calls with injected queues (BullMQ's `Job` doesn't have a `.queue` property) |
+| **Rate limiting** | Applied `@Throttle()` to login, register, forgot-password, reset-password, and escrow callback |
+| **Prisma migrations** | Created initial migration file (`prisma/migrations/`); Dockerfile now runs `migrate deploy` instead of `db push --accept-data-loss` |
+| **Docker Compose** | Added `healthcheck` blocks for `db` and `redis`; backend now waits for healthy dependencies; all env vars passed through via `env_file: .env` |
+| **WebSocket CORS** | Tightened `ChatGateway` from `origin: true` to `FRONTEND_URL` env var |
+| **Tests** | Added meaningful unit tests for `AuthService`, `AuthController` (throttle metadata), `WalletProcessor`, and `EscrowProcessor` |
+
+### Scope decisions
+
+- **Search module** left as a stub (Phase 2 — OpenSearch integration deferred)
+- **Frontend-backend integration** not attempted (frontend still uses `mockData.ts`)
+- **Bull Board UI** not wired up (would need `@bull-board/express` middleware + basic auth — low ROI for this pass)
+- **Git history secret remediation** flagged but not executed (would require `git filter-repo`/BFG + secret rotation — out of scope for this exercise)
+
+### Running tests
+
+```bash
+cd backend
+npm test                 # All unit tests
+npm run test:cov         # With coverage
+```
+
+See [`TECHNICAL_REPORT.md`](../TECHNICAL_REPORT.md) at the repo root for detailed reasoning on each decision.
 ```

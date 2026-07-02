@@ -1,14 +1,15 @@
 import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
 import { Logger, Injectable } from '@nestjs/common';
-import { Job as BullJob } from 'bull';
+import { Job as BullJob } from 'bullmq';
 import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
+import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   QUEUE_NAMES,
   ESCROW_JOBS,
   NOTIFICATION_JOBS,
+  WALLET_JOBS,
 } from '../queues/queues.constants';
 
 // ── Payload Types ─────────────────────────────────────────────────────────────
@@ -45,8 +46,12 @@ export class EscrowProcessor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    @InjectQueue(QUEUE_NAMES.ESCROW)
+    private readonly escrowQueue: Queue,
     @InjectQueue(QUEUE_NAMES.NOTIFICATIONS)
     private readonly notificationsQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.WALLET)
+    private readonly walletQueue: Queue,
   ) {}
 
   // ── 1. Process Chapa / Telebirr Webhook ───────────────────────────────────
@@ -138,33 +143,18 @@ export class EscrowProcessor {
     if (releaseAt > new Date()) {
       // Re-queue with the correct delay
       const delayMs = releaseAt.getTime() - Date.now();
-      await job.queue.add(ESCROW_JOBS.AUTO_RELEASE, job.data, { delay: delayMs });
+      await this.escrowQueue.add(ESCROW_JOBS.AUTO_RELEASE, job.data, { delay: delayMs });
       this.logger.debug(`[auto-release] Hold not elapsed, re-queued with ${delayMs}ms delay`);
       return;
     }
 
-    // Move funds from pending → available in the freelancer wallet
-    const wallet = await this.prisma.freelancerWallet.upsert({
-      where: { userId: freelancerId },
-      update: {
-        pendingBalance:   { decrement: amount },
-        availableBalance: { increment: amount },
-      },
-      create: {
-        userId: freelancerId,
-        pendingBalance: 0,
-        availableBalance: amount,
-      },
-    });
-
-    await this.prisma.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        type: 'CREDIT_AVAILABLE',
-        amount,
-        note: `Milestone payout cleared — 3-day hold complete`,
-        milestoneId,
-      },
+    // Delegate wallet transfer to WalletProcessor via the WALLET queue.
+    // This separation ensures EscrowProcessor owns the release timing/nofication
+    // while WalletProcessor owns the balance state machine.
+    await this.walletQueue.add(WALLET_JOBS.RELEASE_PENDING, {
+      userId: freelancerId,
+      amount,
+      milestoneId,
     });
 
     await this.prisma.eventLog.create({

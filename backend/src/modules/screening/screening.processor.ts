@@ -21,9 +21,9 @@ import {
   Processor, Process, OnQueueFailed, OnQueueCompleted,
 } from '@nestjs/bull';
 import { Logger, Injectable } from '@nestjs/common';
-import { Job as BullJob } from 'bull';
+import { Job as BullJob } from 'bullmq';
 import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
+import { Queue } from 'bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
@@ -66,8 +66,9 @@ export class ScreeningProcessor {
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly config: ConfigService,
+    @InjectQueue(QUEUE_NAMES.APPLICATION)   private readonly applicationQueue: Queue,
     @InjectQueue(QUEUE_NAMES.NOTIFICATIONS) private readonly notificationsQueue: Queue,
-    @InjectQueue(QUEUE_NAMES.ANALYTICS)    private readonly analyticsQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.ANALYTICS)     private readonly analyticsQueue: Queue,
   ) {
     this.openai = new OpenAI({
       apiKey: this.config.get<string>('OPENAI_API_KEY'),
@@ -168,7 +169,7 @@ export class ScreeningProcessor {
     if (isShortlisted) {
       // Auto-schedule interview if score is very high
       if (scoreResult.overallScore >= 90) {
-        await (job.queue as any).add(APPLICATION_JOBS.SCHEDULE_INTERVIEW, {
+        await this.applicationQueue.add(APPLICATION_JOBS.SCHEDULE_INTERVIEW, {
           applicationId,
           userId: job.data.userId,
           jobId: job.data.jobId,

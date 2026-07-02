@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
+import { Queue } from 'bullmq';
 import { QUEUE_NAMES, NOTIFICATION_JOBS } from '../queues/queues.constants';
 
 @Injectable()
