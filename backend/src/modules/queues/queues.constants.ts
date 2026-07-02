@@ -30,6 +30,12 @@ export const NOTIFICATION_JOBS = {
   SEND_EMAIL:   'send-email',
 } as const;
 
+// ── Wallet jobs ───────────────────────────────────────────────────────────
+
+export const WALLET_JOBS = {
+  RELEASE_PENDING: 'release-pending',
+} as const;
+
 // ── Analytics jobs ────────────────────────────────────────────────────────
 
 export const ANALYTICS_JOBS = {
