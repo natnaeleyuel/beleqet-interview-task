@@ -17,8 +17,9 @@ async function bootstrap() {
 
   // ── Security ──────────────────────────────────────────────────────────────
   app.use(helmet());
+  const frontendUrl = (configService.get<string>('FRONTEND_URL', 'http://localhost:3000') ?? '').replace(/\/+$/, '');
   app.enableCors({
-    origin: configService.get<string>('FRONTEND_URL', 'http://localhost:3000'),
+    origin: [frontendUrl, 'http://localhost:3000'],
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   });
