@@ -29,4 +29,7 @@ COPY --from=builder /app/prisma ./prisma
 
 EXPOSE 4000
 
-CMD sh -c "npx prisma migrate deploy && npm run start:prod"
+COPY startup.sh .
+RUN chmod +x startup.sh
+
+CMD ["./startup.sh"]

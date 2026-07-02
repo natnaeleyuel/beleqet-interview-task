@@ -49,12 +49,24 @@ import { TelegramModule } from './modules/telegram/telegram.module';
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        redis: {
-          host: config.get<string>('REDIS_HOST', 'localhost'),
-          port: config.get<number>('REDIS_PORT', 6379),
-          password: config.get<string>('REDIS_PASSWORD'),
-          tls: config.get<boolean>('REDIS_TLS', false) ? {} : undefined,
-        },
+        redis: (() => {
+          const redisUrl = config.get<string>('REDIS_URL');
+          if (redisUrl) {
+            const parsed = new URL(redisUrl);
+            return {
+              host: parsed.hostname,
+              port: parseInt(parsed.port || '6379', 10),
+              password: parsed.password || undefined,
+              tls: config.get<boolean>('REDIS_TLS', false) ? {} : undefined,
+            };
+          }
+          return {
+            host: config.get<string>('REDIS_HOST', 'localhost'),
+            port: config.get<number>('REDIS_PORT', 6379),
+            password: config.get<string>('REDIS_PASSWORD'),
+            tls: config.get<boolean>('REDIS_TLS', false) ? {} : undefined,
+          };
+        })(),
         defaultJobOptions: {
           removeOnComplete: 100,  // keep last 100 completed jobs
           removeOnFail: 200,

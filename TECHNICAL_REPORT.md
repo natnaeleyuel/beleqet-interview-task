@@ -1,6 +1,64 @@
-# Phase 2 - Engineering Notes
+# Engineering Report
 
-This document captures the reasoning, trade-offs, and scope boundaries behind every change in this PR. Written for a tech lead reviewing the submission.
+This document captures the reasoning, trade-offs, and scope boundaries behind every change. Written for a tech lead reviewing the submission.
+
+---
+
+## Phase 3 — Frontend Deployment Preparation & Backend Polish
+
+### Frontend API Integration (graceful degradation)
+
+**Problem**: The Next.js frontend used static `lib/mockData.ts` everywhere. No runtime API calls. Deployment to Vercel would show hardcoded data that doesn't reflect the live backend.
+
+**Decision**: Created `lib/config.ts` (reads `NEXT_PUBLIC_API_URL` with fallback to `http://localhost:4000/api/v1`) and `lib/api.ts` (typed fetch wrapper with `fetchJobs()`, `fetchJob()`). Wired three components with an API-first, mock-fallback strategy:
+
+| Component | Approach |
+|---|---|
+| `FeaturedJobs` (server component) | `async` component fetches from API during SSR; on fetch failure, catches and renders mock data |
+| `JobDetailPage` (SSG) | `generateStaticParams` returns mock IDs; page tries API first, falls back to `mockData.ts` |
+| `JobsListing` (client component) | `useEffect` fetch on mount; catches errors silently; falls back to mock data |
+
+**Trade-off**: The mock fallback means the frontend builds and renders even when the backend is down (e.g., during Vercel build where no backend URL exists yet). The downside is silent fallbacks could hide integration issues in development. A `<DevBanner>` or env flag could warn when fallback is active.
+
+### Auth Page
+
+**Problem**: The `Header` component linked to `/login`, which returned 404. The project had no auth UI.
+
+**Decision**: Created a single `/login` page with a register/login toggle form. Calls `POST /api/v1/auth/register` and `POST /api/v1/auth/login`, stores the JWT in `localStorage`. No auth context provider yet — the token is available but there's no global state to read it across routes. Scoped as a minimal fix to unblock demo evaluation.
+
+**Not implemented** (deferred):
+- Auth context provider (`AuthContext` wrapping `layout.tsx`)
+- Protected route redirects
+- Token refresh logic
+- Logout clears token but does not redirect
+
+### Demo Data Seeding
+
+**Problem**: The Prisma seed creates 55 categories but no companies, users, or jobs. An empty API returns `[]` — useless for a demo.
+
+**Decision**: Created 3 employer users + 3 companies (TakaCash, ethio telecom, Zemen Bank) + 3 published jobs via direct SQL at the database level. The seed file itself was not modified; demo data was inserted independently so it can be dropped easily for a clean production launch.
+
+**Future**: The seed file should be extended with an optional demo-data block gated by `NODE_ENV !== 'production'`. For now this is a manual SQL step.
+
+### Railway Deployment Compatibility
+
+**Problem**: Two issues made Railway deployment fail:
+1. Redis config read individual `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` vars. Railway provides a single `REDIS_URL`.
+2. Dockerfile ran only `prisma migrate deploy` — no seed step. Deployed backend would have an empty database.
+
+**Fixes**:
+1. `src/app.module.ts`: Added `REDIS_URL` detection — when set, parse it with `new URL()` into host/port/password; otherwise fall back to the individual vars.
+2. Created `startup.sh` that runs `prisma migrate deploy` → `prisma db seed` → `npm run start:prod`. Dockerfile updated to use it.
+
+**Verification**: `docker compose build` succeeds with the updated Dockerfile. The `seed` step is idempotent (`upsert` calls), safe to run on every container restart.
+
+### Deployment Config
+
+| File | Purpose |
+|---|---|
+| `beleqet-jobs-nextjs/.env.example` | Documents `NEXT_PUBLIC_API_URL` for Vercel |
+| `beleqet-jobs-nextjs/.env.local` | Local dev override pointing to Docker compose backend |
+| `beleqet-jobs-nextjs/vercel.json` | Explicit build/install/framework settings |
 
 ---
 
@@ -132,6 +190,8 @@ All 22 tests pass across 9 suites. The 5 pre-existing smoke tests remain unchang
 
 ## Summary of changes by file
 
+### Phase 2 (Backend fixes, security, operations)
+
 | File | Change |
 |------|--------|
 | `backend/src/app.module.ts` | Added `APP_GUARD` with `ThrottlerGuard`; simplified throttler config |
@@ -142,10 +202,26 @@ All 22 tests pass across 9 suites. The 5 pre-existing smoke tests remain unchang
 | `backend/src/modules/chat/chat.gateway.ts` | Tightened CORS to `FRONTEND_URL` |
 | `backend/prisma/migrations/20260702000000_init/migration.sql` | CLI-generated (597 lines, 24 models, zero drift) |
 | `backend/package.json` | Removed `bull`/`@types/bull`; added `bull` devDep |
-| `backend/Dockerfile` | `prisma db push` → `prisma migrate deploy` |
+| `backend/Dockerfile` | `prisma db push` → `prisma migrate deploy`; use `startup.sh` |
 | `backend/docker-compose.yml` | Healthchecks, `env_file`, wait-for-healthy |
 | `backend/webhook-server.js` | Secrets → env vars |
 | `backend/simulate.js` | Secrets → env vars |
 | `.gitignore` (root) | Added |
-| `.env.example` | Cleaned dead vars, added `AWS_ENDPOINT` |
+| `backend/.env.example` | Cleaned dead vars, added `AWS_ENDPOINT`, `REDIS_URL` |
 | 4 spec files | Auth service, auth controller, wallet processor, escrow processor |
+
+### Phase 3 (Frontend deployment prep, backend polish)
+
+| File | Change |
+|------|--------|
+| `backend/src/app.module.ts` | Added `REDIS_URL` parsing for Railway compatibility |
+| `backend/startup.sh` | New: runs migrate → seed → start:prod |
+| `beleqet-jobs-nextjs/lib/config.ts` | New: `API_URL` from `NEXT_PUBLIC_API_URL` |
+| `beleqet-jobs-nextjs/lib/api.ts` | New: typed fetch wrapper with `fetchJobs()`, `fetchJob()` |
+| `beleqet-jobs-nextjs/app/login/page.tsx` | New: register/login form with JWT storage |
+| `beleqet-jobs-nextjs/components/FeaturedJobs.tsx` | API-first, mock fallback |
+| `beleqet-jobs-nextjs/components/JobsListing.tsx` | API-first, mock fallback |
+| `beleqet-jobs-nextjs/components/JobCard.tsx` | Decoupled from strict mock data type |
+| `beleqet-jobs-nextjs/app/jobs/[id]/page.tsx` | API-first, mock fallback |
+| `beleqet-jobs-nextjs/.env.example` | New: documents `NEXT_PUBLIC_API_URL` |
+| `beleqet-jobs-nextjs/vercel.json` | New: explicit build/install/framework config |

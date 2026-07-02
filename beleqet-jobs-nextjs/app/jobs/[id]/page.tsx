@@ -1,17 +1,90 @@
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { MapPin, Clock, Building2, ArrowLeft } from "lucide-react";
-import { jobs } from "@/lib/mockData";
+import { notFound } from 'next/navigation';
+import Link from 'next/link';
+import { MapPin, Clock, Building2, ArrowLeft } from 'lucide-react';
+import { jobs as mockJobs } from '@/lib/mockData';
+import { fetchJob } from '@/lib/api';
 
-export function generateStaticParams() {
-  return jobs.map((job) => ({ id: job.id }));
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  try {
+    const { fetchJobs } = await import('@/lib/api');
+    const data = await fetchJobs({ limit: 50 });
+    return data.items.map((job) => ({ id: job.id }));
+  } catch {
+    return mockJobs.map((job) => ({ id: job.id }));
+  }
 }
 
-export default function JobDetailPage({ params }: { params: { id: string } }) {
-  const job = jobs.find((j) => j.id === params.id);
+export default async function JobDetailPage({ params }: { params: { id: string } }) {
+  let job: {
+    id: string;
+    title: string;
+    company: string;
+    location: string;
+    type: string;
+    category: string;
+    postedAgo: string;
+    description?: string;
+    tags?: string[];
+  } | null = null;
+  let related: Array<{
+    id: string;
+    title: string;
+    company: string;
+    location: string;
+    type: string;
+    category: string;
+    postedAgo: string;
+  }> = [];
+
+  try {
+    const apiJob = await fetchJob(params.id);
+    const typeMap: Record<string, string> = {
+      FULL_TIME: 'Full Time', PART_TIME: 'Part Time', REMOTE: 'Remote', HYBRID: 'Hybrid', CONTRACT: 'Contract',
+    };
+    job = {
+      id: apiJob.id,
+      title: apiJob.title,
+      company: apiJob.company?.name || apiJob.companyName || '',
+      location: apiJob.location,
+      type: typeMap[apiJob.type] || 'Full Time',
+      category: apiJob.category?.slug || '',
+      postedAgo: formatRelativeTime(apiJob.createdAt),
+      description: apiJob.description,
+      tags: apiJob.tags,
+    };
+    const { fetchJobs } = await import('@/lib/api');
+    const relatedData = await fetchJobs({ category: apiJob.category?.slug, limit: 4 });
+    related = relatedData.items
+      .filter((r) => r.id !== params.id)
+      .slice(0, 3)
+      .map((r) => ({
+        id: r.id,
+        title: r.title,
+        company: r.company?.name || r.companyName || '',
+        location: r.location,
+        type: typeMap[r.type] || 'Full Time',
+        category: r.category?.slug || '',
+        postedAgo: formatRelativeTime(r.createdAt),
+      }));
+  } catch {
+    const mockJob = mockJobs.find((j) => j.id === params.id);
+    if (!mockJob) notFound();
+    job = { ...mockJob };
+    related = mockJobs.filter((j) => j.category === mockJob.category && j.id !== mockJob.id).slice(0, 3);
+  }
+
   if (!job) notFound();
 
-  const related = jobs.filter((j) => j.category === job.category && j.id !== job.id).slice(0, 3);
+  const typeStyles: Record<string, string> = {
+    'Full Time': 'bg-brandGreen/10 text-brandGreen',
+    'Part Time': 'bg-purpleAccent/10 text-purpleAccent',
+    Remote: 'bg-cyanAccent/10 text-cyanAccent',
+    Hybrid: 'bg-orangeAccent/10 text-orangeAccent',
+    'On-site': 'bg-muted/10 text-muted',
+    Contract: 'bg-redAccent/10 text-redAccent',
+  };
 
   return (
     <div className="container-page py-10">
@@ -36,19 +109,21 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
                   <span className="flex items-center gap-1">
                     <Clock className="h-3.5 w-3.5" /> {job.postedAgo}
                   </span>
-                  <span className="rounded-full bg-brandGreen/10 text-brandGreen font-semibold px-2.5 py-1">
+                  <span className={`rounded-full font-semibold px-2.5 py-1 text-xs ${typeStyles[job.type] || 'bg-muted/10 text-muted'}`}>
                     {job.type}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="mt-7 pt-7 border-t border-border">
-              <h2 className="text-sm font-semibold text-ink mb-3">Job Description</h2>
-              <p className="text-sm text-muted leading-relaxed">{job.description}</p>
-            </div>
+            {job.description && (
+              <div className="mt-7 pt-7 border-t border-border">
+                <h2 className="text-sm font-semibold text-ink mb-3">Job Description</h2>
+                <p className="text-sm text-muted leading-relaxed">{job.description}</p>
+              </div>
+            )}
 
-            {job.tags && (
+            {job.tags && job.tags.length > 0 && (
               <div className="mt-6 flex flex-wrap gap-2">
                 {job.tags.map((tag) => (
                   <span key={tag} className="text-xs font-medium text-muted bg-pageBg border border-border rounded-full px-3 py-1">
@@ -91,4 +166,13 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
       </div>
     </div>
   );
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 1) return 'Just now';
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }

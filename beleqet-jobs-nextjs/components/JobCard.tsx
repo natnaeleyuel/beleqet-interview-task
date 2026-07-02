@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { MapPin, Bookmark, Building2 } from "lucide-react";
-import type { Job } from "@/lib/mockData";
 
 const typeStyles: Record<string, string> = {
   "Full Time": "bg-brandGreen/10 text-brandGreen",
@@ -11,7 +10,16 @@ const typeStyles: Record<string, string> = {
   Contract: "bg-redAccent/10 text-redAccent",
 };
 
-export default function JobCard({ job }: { job: Job }) {
+type JobCardJob = {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  type: string;
+  postedAgo: string;
+};
+
+export default function JobCard({ job }: { job: JobCardJob }) {
   return (
     <Link
       href={`/jobs/${job.id}`}
