@@ -1,8 +1,8 @@
 import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
 import { Logger, Injectable } from '@nestjs/common';
-import { Job as BullJob } from 'bull';
+import { Job as BullJob } from 'bullmq';
 import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
+import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -46,6 +46,8 @@ export class EscrowProcessor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    @InjectQueue(QUEUE_NAMES.ESCROW)
+    private readonly escrowQueue: Queue,
     @InjectQueue(QUEUE_NAMES.NOTIFICATIONS)
     private readonly notificationsQueue: Queue,
     @InjectQueue(QUEUE_NAMES.WALLET)
@@ -141,7 +143,7 @@ export class EscrowProcessor {
     if (releaseAt > new Date()) {
       // Re-queue with the correct delay
       const delayMs = releaseAt.getTime() - Date.now();
-      await job.queue.add(ESCROW_JOBS.AUTO_RELEASE, job.data, { delay: delayMs });
+      await this.escrowQueue.add(ESCROW_JOBS.AUTO_RELEASE, job.data, { delay: delayMs });
       this.logger.debug(`[auto-release] Hold not elapsed, re-queued with ${delayMs}ms delay`);
       return;
     }
